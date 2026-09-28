@@ -1,0 +1,7 @@
+using Metrix.Common;
+
+namespace Metrix.Features.PickupDelivery;
+
+public sealed class PickupDeliveryHandler(
+    IDeliveryStrategy<PickupDeliveryCommand> strategy,
+    TimeProvider timeProvider) : DeliveryQuoteHandler<PickupDeliveryCommand>(strategy, timeProvider);
