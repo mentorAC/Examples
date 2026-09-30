@@ -28,7 +28,7 @@ services:
     command:
       - -config.file=/etc/loki/loki.yml
     ports:
-      # HTTP API; the app pushes logs to the native OTLP endpoint /otlp/v1/logs.
+      # HTTP API; otel-collector pushes logs to the native OTLP endpoint /otlp/v1/logs.
       - "3100:3100"
     volumes:
       - ./loki/loki.yml:/etc/loki/loki.yml:ro
@@ -44,12 +44,27 @@ services:
     depends_on:
       - prometheus
     ports:
-      - "3200:3200" # HTTP API (Grafana queries it)
-      - "4317:4317" # OTLP gRPC
-      - "4318:4318" # OTLP HTTP; the app pushes traces to /v1/traces
+      # HTTP API (Grafana queries it). OTLP (4317/4318) stays inside the network: traces come via otel-collector.
+      - "3200:3200"
     volumes:
       - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
       - tempo-data:/var/tempo
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.162.0
+    container_name: tracing-otel-collector
+    command:
+      - --config=/etc/otelcol/otel-collector.yml
+    depends_on:
+      - tempo
+      - loki
+    ports:
+      # The app's single OTLP endpoint: traces go on to Tempo, logs to Loki.
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    volumes:
+      - ./otel-collector/otel-collector.yml:/etc/otelcol/otel-collector.yml:ro
     restart: unless-stopped
 
   grafana:

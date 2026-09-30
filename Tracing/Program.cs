@@ -1,6 +1,5 @@
 using System.Text.Json.Serialization;
 using FluentValidation;
-using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -26,11 +25,6 @@ builder.Services.AddDeliveryStrategies(typeof(Program).Assembly);
 // Metrics and traces: IAppMetrix<TCommand> names its metrics and spans after the command type.
 builder.Services.AddSingleton(typeof(IAppMetrix<>), typeof(AppMetrix<>));
 
-// OTLP/HTTP endpoints are used as is: traces go straight to Tempo, logs to Loki's native OTLP endpoint.
-var otlp = builder.Configuration.GetSection("Otlp");
-var tracesEndpoint = new Uri(otlp["TracesEndpoint"] ?? "http://localhost:4318/v1/traces");
-var logsEndpoint = new Uri(otlp["LogsEndpoint"] ?? "http://localhost:3100/otlp/v1/logs");
-
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource
         .AddService(AppTelemetry.ServiceName)
@@ -46,17 +40,11 @@ builder.Services.AddOpenTelemetry()
         .AddAspNetCoreInstrumentation(options =>
             // Prometheus scrapes every 5 s; those requests would flood Tempo.
             options.Filter = context => !context.Request.Path.StartsWithSegments("/metrics"))
-        .AddOtlpExporter(options =>
-        {
-            options.Endpoint = tracesEndpoint;
-            options.Protocol = OtlpExportProtocol.HttpProtobuf;
-        }))
+        // OTLP exporters read OTEL_EXPORTER_OTLP_ENDPOINT/PROTOCOL from configuration and append /v1/traces, /v1/logs;
+        // otel-collector behind that one endpoint routes traces to Tempo and logs to Loki.
+        .AddOtlpExporter())
     .WithLogging(
-        logging => logging.AddOtlpExporter(options =>
-        {
-            options.Endpoint = logsEndpoint;
-            options.Protocol = OtlpExportProtocol.HttpProtobuf;
-        }),
+        logging => logging.AddOtlpExporter(),
         options =>
         {
             // Loki shows the rendered message as the log line; the template arguments stay as attributes.
