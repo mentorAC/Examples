@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="Metrix/Metrix.csproj" />
   <Project Path="Strategy/Strategy.csproj" />
+  <Project Path="Tracing/Tracing.csproj" />
 </Solution>
