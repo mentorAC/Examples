@@ -5,12 +5,26 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
+using Serilog;
+using Serilog.Formatting.Compact;
 using Tracing.Behaviors;
 using Tracing.Common;
 using Tracing.Infrastructure;
 using Tracing.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Console goes through Serilog as one more ILogger provider; OTLP export (WithLogging below) stays untouched.
+// ClearProviders must run before AddOpenTelemetry, or it would remove the OTLP provider too.
+// Levels come from Logging:Serilog in appsettings; Serilog itself passes everything through.
+builder.Logging.ClearProviders();
+var consoleLogger = new LoggerConfiguration().MinimumLevel.Verbose();
+consoleLogger = builder.Environment.IsDevelopment()
+    ? consoleLogger.WriteTo.Console(
+        outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext}: {Message:lj} {TraceId}{NewLine}{Exception}")
+    // One JSON object per line; @tr/@sp carry trace_id/span_id.
+    : consoleLogger.WriteTo.Console(new CompactJsonFormatter());
+builder.Logging.AddSerilog(consoleLogger.CreateLogger(), dispose: true);
 
 builder.Services.AddControllers()
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
